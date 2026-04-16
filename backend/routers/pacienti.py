@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import date
+from typing import Optional, List
 from database.db import get_session
 from database.models import Pacienti
 
@@ -9,10 +10,20 @@ router = APIRouter()
 class PacientSchema(BaseModel):
     nume: str
     cnp: str
-    phone: str | None = None
-    nastere: date | None = None
+    phone: Optional[str] = None
+    nastere: Optional[date] = None
 
-@router.get("/")
+class PacientResponse(BaseModel):
+    id: int
+    nume: str
+    cnp: str
+    phone: Optional[str] = None
+    nastere: Optional[date] = None
+
+    class Config:
+        from_attributes = True
+
+@router.get("/", response_model=List[PacientResponse])
 def get_pacienti():
     session = get_session()
     try:
@@ -20,7 +31,7 @@ def get_pacienti():
     finally:
         session.close()
 
-@router.get("/{cnp}")
+@router.get("/{cnp}", response_model=PacientResponse)
 def get_pacient(cnp: str):
     session = get_session()
     try:
@@ -31,7 +42,7 @@ def get_pacient(cnp: str):
     finally:
         session.close()
 
-@router.post("/")
+@router.post("/", response_model=PacientResponse)
 def create_pacient(pacient: PacientSchema):
     session = get_session()
     try:
