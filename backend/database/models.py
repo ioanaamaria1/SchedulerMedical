@@ -54,3 +54,14 @@ class Notificari(Base):
     send_at = Column(DateTime)
     type = Column(String(50))
     programare = relationship("Programari", back_populates="notificari")
+
+# ==========================================
+# TABELUL NOU PENTRU AUTENTIFICARE
+# ==========================================
+class Conturi(Base):
+    __tablename__ = "conturi"
+    id = Column(Integer, primary_key=True)
+    email = Column(String(100), unique=True, nullable=False)
+    parola_hash = Column(String(200), nullable=False)
+    rol = Column(String(20), nullable=False)
+    pacient_id = Column(Integer, ForeignKey("pacienti.id"), nullable=True)

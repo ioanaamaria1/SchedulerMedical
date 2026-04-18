@@ -17,6 +17,8 @@ class ProgramareResponse(BaseModel):
     slot_id: int
     type: Optional[str] = None
     stare: str
+    data: Optional[str] = None
+    ora: Optional[str] = None  # <-- Acum trimitem si ora exacta!
 
     class Config:
         from_attributes = True
@@ -28,7 +30,10 @@ class ProgramareResponse(BaseModel):
             pacienti_id=obj.pacienti_id,
             slot_id=obj.slot_id,
             type=obj.type,
-            stare=obj.stare.value if obj.stare else "programat"
+            stare=obj.stare.value if obj.stare else "programat",
+            data=str(obj.slot.date) if obj.slot and obj.slot.date else None,
+            # Formatam ora ca "HH:MM" (ex: 10:00)
+            ora=obj.slot.start_time.strftime("%H:%M") if obj.slot and obj.slot.start_time else None
         )
 
 @router.get("/")

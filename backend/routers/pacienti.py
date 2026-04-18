@@ -1,79 +1,93 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from datetime import date
-from typing import Optional, List
 from database.db import get_session
 from database.models import Pacienti
 
 router = APIRouter()
 
-class PacientSchema(BaseModel):
+
+class PacientRequest(BaseModel):
     nume: str
     cnp: str
-    phone: Optional[str] = None
-    nastere: Optional[date] = None
+    phone: str
 
-class PacientResponse(BaseModel):
-    id: int
-    nume: str
-    cnp: str
-    phone: Optional[str] = None
-    nastere: Optional[date] = None
 
-    class Config:
-        from_attributes = True
+class PacientUpdate(BaseModel):
+    nume: str = None
+    cnp: str = None
+    phone: str = None
 
-@router.get("/", response_model=List[PacientResponse])
+
+# ---- IA TOTI PACIENTII (Folosit de Doctor) ----
+@router.get("/")
 def get_pacienti():
     session = get_session()
     try:
-        return session.query(Pacienti).all()
+        pacienti = session.query(Pacienti).all()
+        return pacienti
     finally:
         session.close()
 
-@router.get("/{cnp}", response_model=PacientResponse)
-def get_pacient(cnp: str):
+
+# ---- RUTA NOUĂ: IA UN SINGUR PACIENT (Folosit de formularul pacientului) ----
+@router.get("/{id}")
+def get_pacient(id: int):
     session = get_session()
     try:
-        pacient = session.query(Pacienti).filter(Pacienti.cnp == cnp).first()
+        pacient = session.query(Pacienti).filter(Pacienti.id == id).first()
         if not pacient:
-            raise HTTPException(status_code=404, detail="Pacient negasit")
+            raise HTTPException(status_code=404, detail="Pacientul nu exista")
         return pacient
     finally:
         session.close()
 
-@router.post("/", response_model=PacientResponse)
-def create_pacient(pacient: PacientSchema):
+
+# ---- CREARE PACIENT ----
+@router.post("/")
+def create_pacient(pacient: PacientRequest):
     session = get_session()
     try:
-        existent = session.query(Pacienti).filter(Pacienti.cnp == pacient.cnp).first()
-        if existent:
-            raise HTTPException(status_code=400, detail="CNP deja existent")
-        nou = Pacienti(**pacient.model_dump())
-        session.add(nou)
+        nou_pacient = Pacienti(nume=pacient.nume, cnp=pacient.cnp, phone=pacient.phone)
+        session.add(nou_pacient)
         session.commit()
-        session.refresh(nou)
-        return nou
-    except HTTPException:
-        raise
+        return {"mesaj": "Pacient adaugat!"}
     except Exception as e:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         session.close()
 
+
+# ---- STERGE PACIENT ----
 @router.delete("/{id}")
 def delete_pacient(id: int):
     session = get_session()
     try:
         pacient = session.query(Pacienti).filter(Pacienti.id == id).first()
         if not pacient:
-            raise HTTPException(status_code=404, detail="Pacient negasit")
+            raise HTTPException(status_code=404, detail="Pacientul nu exista")
         session.delete(pacient)
         session.commit()
-        return {"detail": "Pacient sters"}
-    except HTTPException:
-        raise
+        return {"mesaj": "Pacient sters"}
+    finally:
+        session.close()
+
+
+# ---- ACTUALIZARE PACIENT ----
+@router.put("/{id_pacient}")
+def update_pacient(id_pacient: int, req: PacientUpdate):
+    session = get_session()
+    try:
+        pacient = session.query(Pacienti).filter(Pacienti.id == id_pacient).first()
+        if not pacient:
+            raise HTTPException(status_code=404, detail="Pacientul nu exista")
+
+        if req.nume: pacient.nume = req.nume
+        if req.cnp: pacient.cnp = req.cnp
+        if req.phone: pacient.phone = req.phone
+
+        session.commit()
+        return {"mesaj": "Date pacient actualizate!"}
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(e))

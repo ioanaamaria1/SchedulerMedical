@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database.db import init_db
-from routers import pacienti, programari, sloturi, lista_asteptare
+# 1. AM ADAUGAT 'auth' LA IMPORTUL DE MAI JOS:
+from routers import pacienti, programari, sloturi, lista_asteptare, auth
 
 app = FastAPI(title="Scheduler Medical API")
 
@@ -20,6 +21,9 @@ def startup():
 @app.get("/")
 def root():
     return {"status": "Scheduler Medical API functioneaza"}
+
+# 2. AM ADAUGAT UȘA (RUTA) PENTRU LOGIN/REGISTER AICI:
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 
 app.include_router(pacienti.router, prefix="/pacienti", tags=["pacienti"])
 app.include_router(programari.router, prefix="/programari", tags=["programari"])
