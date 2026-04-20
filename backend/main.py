@@ -4,8 +4,7 @@ from database.db import init_db
 # 1. AM ADAUGAT 'auth' LA IMPORTUL DE MAI JOS:
 from routers import pacienti, programari, sloturi, lista_asteptare, auth
 
-app = FastAPI(title="Scheduler Medical API")
-
+app = FastAPI(title="Clinica GI Med API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],

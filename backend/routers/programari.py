@@ -1,71 +1,77 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
 from database.db import get_session
-from database.models import Programari, Pacienti, Sloturi, StareProgramare
+from database.models import Programari, Sloturi
+from sqlalchemy.orm import joinedload
 
 router = APIRouter()
 
-class ProgramareSchema(BaseModel):
+class ProgramareRequest(BaseModel):
     pacienti_id: int
     slot_id: int
-    type: Optional[str] = None
+    type: str
 
-class ProgramareResponse(BaseModel):
-    id: int
-    pacienti_id: int
-    slot_id: int
-    type: Optional[str] = None
-    stare: str
-    data: Optional[str] = None
-    ora: Optional[str] = None  # <-- Acum trimitem si ora exacta!
-
-    class Config:
-        from_attributes = True
-
-    @classmethod
-    def from_orm_custom(cls, obj):
-        return cls(
-            id=obj.id,
-            pacienti_id=obj.pacienti_id,
-            slot_id=obj.slot_id,
-            type=obj.type,
-            stare=obj.stare.value if obj.stare else "programat",
-            data=str(obj.slot.date) if obj.slot and obj.slot.date else None,
-            # Formatam ora ca "HH:MM" (ex: 10:00)
-            ora=obj.slot.start_time.strftime("%H:%M") if obj.slot and obj.slot.start_time else None
-        )
-
+# 1. OBȚINE TOATE PROGRAMĂRILE (ACUM TRAGE PERFECT DATELE DIN TABEL)
 @router.get("/")
 def get_programari():
     session = get_session()
     try:
-        items = session.query(Programari).all()
-        return [ProgramareResponse.from_orm_custom(p) for p in items]
+        # Aducem programările cu tot cu slotul lor atașat
+        programari_db = session.query(Programari).options(joinedload(Programari.slot)).all()
+
+        lista_finala = []
+        for p in programari_db:
+            # Folosim numele EXACȚI din models.py: .date și .start_time
+            ziua = str(p.slot.date) if p.slot and p.slot.date else "0000-00-00"
+            ora = str(p.slot.start_time)[:5] if p.slot and p.slot.start_time else "--:--"
+
+            lista_finala.append({
+                "id": p.id,
+                "pacienti_id": p.pacienti_id,
+                "slot_id": p.slot_id,
+                "type": p.type,
+                "data": ziua,
+                "ora": ora
+            })
+
+        return lista_finala
     finally:
         session.close()
 
+# 2. CREEAZĂ O NOUĂ PROGRAMARE
 @router.post("/")
-def create_programare(programare: ProgramareSchema):
+def create_programare(prog: ProgramareRequest):
     session = get_session()
     try:
-        pacient = session.query(Pacienti).filter(Pacienti.id == programare.pacienti_id).first()
-        if not pacient:
-            raise HTTPException(status_code=404, detail="Pacient negasit")
+        # REGULA ANTI-SPAM: Maxim 3 programari active per pacient
+        numar_programari = session.query(Programari).filter(Programari.pacienti_id == prog.pacienti_id).count()
 
-        slot = session.query(Sloturi).filter(Sloturi.id == programare.slot_id).first()
+        if numar_programari >= 3:
+            raise HTTPException(
+                status_code=400,
+                detail="Ai atins limita maximă de programări active (3). Te rugăm să anulezi din ele sau să contactezi clinica."
+            )
+
+        # Verificăm dacă slotul există
+        slot = session.query(Sloturi).filter(Sloturi.id == prog.slot_id).first()
         if not slot:
-            raise HTTPException(status_code=404, detail="Slot negasit")
+            raise HTTPException(status_code=404, detail="Slotul nu a fost găsit.")
 
-        ocupat = session.query(Programari).filter(Programari.slot_id == programare.slot_id).first()
-        if ocupat:
-            raise HTTPException(status_code=400, detail="Slot deja ocupat")
+        # Verificăm dacă slotul e deja ocupat
+        programare_existenta = session.query(Programari).filter(Programari.slot_id == prog.slot_id).first()
+        if programare_existenta:
+            raise HTTPException(status_code=400, detail="Acest slot este deja ocupat.")
 
-        nou = Programari(**programare.model_dump())
-        session.add(nou)
+        noua_prog = Programari(
+            pacienti_id=prog.pacienti_id,
+            slot_id=prog.slot_id,
+            type=prog.type
+        )
+
+        session.add(noua_prog)
         session.commit()
-        session.refresh(nou)
-        return ProgramareResponse.from_orm_custom(nou)
+        return {"mesaj": "Programare creată!"}
+
     except HTTPException:
         raise
     except Exception as e:
@@ -74,18 +80,18 @@ def create_programare(programare: ProgramareSchema):
     finally:
         session.close()
 
+# 3. ȘTERGE (ANULEAZĂ) O PROGRAMARE
 @router.delete("/{id}")
 def delete_programare(id: int):
     session = get_session()
     try:
-        programare = session.query(Programari).filter(Programari.id == id).first()
-        if not programare:
-            raise HTTPException(status_code=404, detail="Programare negasita")
-        session.delete(programare)
+        prog = session.query(Programari).filter(Programari.id == id).first()
+        if not prog:
+            raise HTTPException(status_code=404, detail="Programarea nu a fost găsită")
+
+        session.delete(prog)
         session.commit()
-        return {"detail": "Programare stearsa"}
-    except HTTPException:
-        raise
+        return {"mesaj": "Programare anulată!"}
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(e))
