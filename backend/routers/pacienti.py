@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database.db import get_session
-from database.models import Pacienti
+# Am adăugat Conturi și Programari la import
+from database.models import Pacienti, Conturi, Programari
 
 router = APIRouter()
 
@@ -45,6 +46,10 @@ def get_pacient(id: int):
 # ---- CREARE PACIENT ----
 @router.post("/")
 def create_pacient(pacient: PacientRequest):
+    # Validare: CNP-ul trebuie să aibă fix 13 caractere și să conțină doar cifre
+    if len(pacient.cnp) != 13 or not pacient.cnp.isdigit():
+        raise HTTPException(status_code=400, detail="CNP-ul trebuie să conțină exact 13 cifre!")
+
     session = get_session()
     try:
         nou_pacient = Pacienti(nume=pacient.nume, cnp=pacient.cnp, phone=pacient.phone)
@@ -63,19 +68,34 @@ def create_pacient(pacient: PacientRequest):
 def delete_pacient(id: int):
     session = get_session()
     try:
+        # 1. Mai întâi ștergem contul asociat pacientului
+        session.query(Conturi).filter(Conturi.pacient_id == id).delete(synchronize_session=False)
+
+        # 2. Ștergem programările asociate pacientului
+        session.query(Programari).filter(Programari.pacienti_id == id).delete(synchronize_session=False)
+
+        # 3. La final, găsim și ștergem pacientul
         pacient = session.query(Pacienti).filter(Pacienti.id == id).first()
         if not pacient:
             raise HTTPException(status_code=404, detail="Pacientul nu exista")
+
         session.delete(pacient)
         session.commit()
-        return {"mesaj": "Pacient sters"}
+        return {"mesaj": "Pacient și date asociate șterse cu succes!"}
+
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         session.close()
 
 
-# ---- ACTUALIZARE PACIENT ----
 @router.put("/{id_pacient}")
 def update_pacient(id_pacient: int, req: PacientUpdate):
+    # Validare CNP dacă se încearcă actualizarea lui
+    if req.cnp and (len(req.cnp) != 13 or not req.cnp.isdigit()):
+        raise HTTPException(status_code=400, detail="CNP-ul trebuie să conțină exact 13 cifre!")
+
     session = get_session()
     try:
         pacient = session.query(Pacienti).filter(Pacienti.id == id_pacient).first()

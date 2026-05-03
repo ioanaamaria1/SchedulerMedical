@@ -30,7 +30,19 @@
       
       window.location.reload();
     } catch (err) {
-      mesajEroare = "Eroare: " + err.message;
+      // MAGIA SE ÎNTÂMPLĂ AICI:
+      // Verificăm dacă primim 'detail' (cum trimite FastAPI)
+      if (err && err.detail) {
+        mesajEroare = err.detail;
+      }
+      // Altfel, dacă e o eroare normală de JS și nu e [object Object]
+      else if (err && err.message && !err.message.includes('[object Object]')) {
+        mesajEroare = "Eroare: " + err.message;
+      }
+      // Dacă eroarea a fost "strivită" pe drum, afișăm mesajul nostru
+      else {
+        mesajEroare = "Eroare la salvare! Verificați ca CNP-ul să aibă 13 cifre.";
+      }
     } finally {
       seSalveaza = false;
     }

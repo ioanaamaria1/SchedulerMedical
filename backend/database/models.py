@@ -55,9 +55,6 @@ class Notificari(Base):
     type = Column(String(50))
     programare = relationship("Programari", back_populates="notificari")
 
-# ==========================================
-# TABELUL NOU PENTRU AUTENTIFICARE
-# ==========================================
 class Conturi(Base):
     __tablename__ = "conturi"
     id = Column(Integer, primary_key=True)
